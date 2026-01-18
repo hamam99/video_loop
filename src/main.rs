@@ -11,6 +11,7 @@ fn main() -> ExitCode {
     let mut input = String::from("input.mov");
     let mut output: Option<String> = None;
     let mut target_seconds = 60.0;
+    let mut threads: Option<usize> = None;
     let mut args = env::args().skip(1).peekable();
     while let Some(a) = args.next() {
         if a == "--input" || a == "-i" {
@@ -40,6 +41,14 @@ fn main() -> ExitCode {
                     }
                 } else if let Ok(x) = f64::from_str(&s) {
                     target_seconds = x;
+                }
+            }
+            continue;
+        }
+        if a == "--threads" {
+            if let Some(v) = args.next() {
+                if let Ok(x) = usize::from_str(&v) {
+                    threads = Some(x);
                 }
             }
             continue;
@@ -79,32 +88,10 @@ fn main() -> ExitCode {
     let loops = (target_seconds / dur).ceil() as usize;
     let mut list = String::new();
     for _ in 0..loops {
-        list.push_str(format!("file {}\n", input).as_str());
+        list.push_str(format!("file '{}'\n", input).as_str());
     }
     let list_path = "concat_list.txt";
     fs::write(list_path, list).unwrap();
-    let mut copy_child = FfmpegCommand::new()
-        .arg("-y")
-        .arg("-f")
-        .arg("concat")
-        .arg("-safe")
-        .arg("0")
-        .arg("-i")
-        .arg(list_path)
-        .arg("-t")
-        .arg(format!("{}", target_seconds as u32))
-        .arg("-movflags")
-        .arg("+faststart")
-        .arg("-c")
-        .arg("copy")
-        .arg(out.as_str())
-        .spawn()
-        .unwrap();
-    let copy_status = copy_child.wait().unwrap();
-    if copy_status.success() {
-        let _ = fs::remove_file(list_path);
-        return ExitCode::SUCCESS;
-    }
     let mut reenc_child = FfmpegCommand::new()
         .arg("-y")
         .arg("-f")
@@ -113,24 +100,33 @@ fn main() -> ExitCode {
         .arg("0")
         .arg("-i")
         .arg(list_path)
+        .arg("-map")
+        .arg("0:v:0")
+        .arg("-map")
+        .arg("0:a?")
         .arg("-t")
         .arg(format!("{}", target_seconds as u32))
         .arg("-movflags")
         .arg("+faststart")
         .arg("-vf")
-        .arg("pad=ceil(iw/2)*2:ceil(ih/2)*2:(ceil(iw/2)*2-iw)/2:(ceil(ih/2)*2-ih)/2")
+        .arg("scale=w=1920:h=-2:force_original_aspect_ratio=decrease,pad=ceil(iw/2)*2:ceil(ih/2)*2:(ceil(iw/2)*2-iw)/2:(ceil(ih/2)*2-ih)/2,setsar=1")
         .arg("-c:v")
         .arg("libx264")
         .arg("-preset")
-        .arg("veryfast")
+        .arg("superfast")
         .arg("-crf")
-        .arg("20")
+        .arg("26")
+        .arg("-shortest")
+        .arg("-max_muxing_queue_size")
+        .arg("1024")
+        .arg("-threads")
+        .arg(threads.map(|t| t.to_string()).unwrap_or_else(|| "0".to_string()))
         .arg("-pix_fmt")
         .arg("yuv420p")
         .arg("-c:a")
         .arg("aac")
         .arg("-b:a")
-        .arg("128k")
+        .arg("96k")
         .arg(out.as_str())
         .spawn()
         .unwrap();
