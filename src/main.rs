@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 fn main() -> ExitCode {
     download::auto_download().unwrap();
-    let mut input = String::from("input.mov");
+    let mut input = String::from("");
     let mut output: Option<String> = None;
     let mut target_seconds = 60.0;
     let mut threads: Option<usize> = None;
