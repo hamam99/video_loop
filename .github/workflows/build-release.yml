@@ -43,15 +43,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
-      - name: Ensure tag commit is on main
+      - name: Ensure tag commit is on master
         shell: bash
         run: |
           set -eu
-          git fetch origin main
-          if git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/main; then
-            echo "Tag commit is on main"
+          git fetch origin master
+          if git merge-base --is-ancestor "$(git rev-parse HEAD)" origin/master; then
+            echo "Tag commit is on master"
           else
-            echo "Tag commit is not on main; failing per policy"
+            echo "Tag commit is not on master; failing per policy"
             exit 1
           fi
 
