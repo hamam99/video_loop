@@ -1,0 +1,131 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            ext: ""
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: zip
+            ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+            ext: ".exe"
+    steps:
+      - name: Start
+        run: echo "Starting build for ${{ github.ref }} on ${{ matrix.os }}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag commit is on main
+        shell: bash
+        run: |
+          set -eu
+          git fetch origin main
+          if git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "Tag commit is on main"
+          else
+            echo "Tag commit is not on main; failing per policy"
+            exit 1
+          fi
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Dependencies
+        run: cargo fetch
+
+      - name: Build Release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Artifact
+        shell: bash
+        run: |
+          set -eu
+          OUTDIR="target/${{ matrix.target }}/release"
+          BIN="video_loop${{ matrix.ext }}"
+          mkdir -p dist
+          cp "${OUTDIR}/${BIN}" "dist/${BIN}"
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            pushd dist >/dev/null
+            zip -9 "video_loop-${{ matrix.target }}.zip" "${BIN}"
+            popd >/dev/null
+          else
+            tar -C dist -czf "dist/video_loop-${{ matrix.target }}.tar.gz" "${BIN}"
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: video_loop-${{ matrix.target }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/**/*
+
+      - name: Success Summary
+        if: success()
+        run: |
+          echo "Release ${{ github.ref_name }} published with assets." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Failure Summary
+        if: failure()
+        run: |
+          echo "Build or release failed. Check logs above." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Optional Slack Notification (Success)
+        if: success() && env.SLACK_WEBHOOK != ''
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: "Release ${{ github.ref_name }} succeeded"
+          SLACK_COLOR: good
+
+      - name: Optional Slack Notification (Failure)
+        if: failure() && env.SLACK_WEBHOOK != ''
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: "Release ${{ github.ref_name }} failed"
+          SLACK_COLOR: danger
+
