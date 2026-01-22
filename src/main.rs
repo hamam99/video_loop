@@ -11,7 +11,7 @@ fn main() -> ExitCode {
     let mut input = String::from("");
     let mut output: Option<String> = None;
     let mut target_seconds = 60.0;
-    let mut threads: Option<usize> = None;
+    let mut threads: Option<usize> = std::thread::available_parallelism().ok().map(|n| n.get());
     let mut args = env::args().skip(1).peekable();
     while let Some(a) = args.next() {
         if a == "--input" || a == "-i" {

@@ -37,6 +37,7 @@ Flags:
   - seconds: 90 (plain number)
   - minutes: 1m, 5m
 - -o, --output <path>   Output file path (optional)
+- --threads <n>         Number of ffmpeg threads (defaults to CPU cores)
 
 Examples:
 - Loop to 5 minutes, custom output:
@@ -49,6 +50,12 @@ cargo run --release -- -i /path/to/input.mov -t 5m -o /path/to/out.mov
 
 ```bash
 cargo run --release -- -i /path/to/input.mov -t 90
+```
+
+- Loop to 10 minutes using 16 threads:
+
+```bash
+cargo run --release -- -i /path/to/input.mov -t 10m --threads 16
 ```
 
 Default Output Naming:
